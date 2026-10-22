@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx src/server.ts",
+    "http": "tsx src/httpServer.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "typecheck": "tsc --noEmit",
     "test:unit": "tsx --test tests/notes.test.ts",
@@ -15,7 +16,8 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.1",
+    "@modelcontextprotocol/node": "^2.1.1",
+    "@modelcontextprotocol/server": "^2.3.1",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7.10.0",
     "dotenv": "^18.0.5",
