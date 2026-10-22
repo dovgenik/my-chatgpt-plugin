@@ -2,11 +2,12 @@
   "name": "my-chatgpt-plugin",
   "version": "1.0.0",
   "description": "y first ChatGPT plugin",
-  "main": "index.js",
+  "main": "dist/httpServer.js",
   "scripts": {
     "dev": "tsx src/server.ts",
     "http": "tsx src/httpServer.ts",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "prisma generate --config prisma7.config.ts && tsc",
+    "start": "node dist/httpServer.js",
     "typecheck": "tsc --noEmit",
     "test:unit": "tsx --test tests/notes.test.ts",
     "test:integration": "tsx --test tests/prisma.integration.test.ts"
