@@ -9,5 +9,6 @@
     "types": ["node"],
     "outDir": "dist"
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests"],
+  "rootDir": "src"
 }
