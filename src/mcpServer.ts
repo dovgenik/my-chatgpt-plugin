@@ -1,5 +1,5 @@
 //src\mcpServer.ts
-import { McpServer } from "@modelcontextprotocol/server";
+import { McpServer, requireScopes, } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import { NotesService } from "./notes.js";
@@ -19,8 +19,9 @@ export function createMcpServer() {
     {
       description: "Save a note",
       inputSchema: z.object({
-        text: z.string().min(1),
+        text: z.string().min(1),  
       }),
+      scopeChallenge: requireScopes("notes:write"),
     },
     async ({ text }) => {
       const note = await notesService.saveNote(text);
@@ -40,6 +41,7 @@ export function createMcpServer() {
     "get_notes",
     {
       description: "Get all saved notes",
+      scopeChallenge: requireScopes("notes:read"),
     },
     async () => {
       const notes = await notesService.getNotes();
@@ -62,6 +64,7 @@ export function createMcpServer() {
       inputSchema: z.object({
         query: z.string().min(1),
       }),
+      scopeChallenge: requireScopes("notes:read"),
     },
     async ({ query }) => {
       const notes = await notesService.searchNotes(query);
@@ -84,6 +87,7 @@ export function createMcpServer() {
       inputSchema: z.object({
         id: z.string().uuid(),
       }),
+      scopeChallenge: requireScopes("notes:write"),
     },
     async ({ id }) => {
       const deleted = await notesService.deleteNote(id);
@@ -119,6 +123,7 @@ export function createMcpServer() {
         id: z.string().uuid(),
         text: z.string().trim().min(1),
       }),
+      scopeChallenge: requireScopes("notes:write"),
     },
     async ({ id, text }) => {
       const updated = await notesService.updateNote(id, text);
@@ -153,6 +158,7 @@ export function createMcpServer() {
     title: "All Notes",
     description: "All notes stored in the notes database",
     mimeType: "application/json",
+    scopeChallenge: requireScopes("notes:read"),
   },
   async (uri) => {
     const notes = await notesService.getNotes();
@@ -163,6 +169,46 @@ export function createMcpServer() {
           uri: uri.href,
           mimeType: "application/json",
           text: JSON.stringify(notes, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+server.registerTool(
+  "whoami",
+  {
+    description: "Show authenticated client information",
+    inputSchema: z.object({}),
+  },
+  async (_args, ctx) => {
+    const authInfo = ctx.http?.authInfo;
+
+    if (!authInfo) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "No authentication information available",
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              clientId: authInfo.clientId,
+              scopes: authInfo.scopes,
+              expiresAt: authInfo.expiresAt,
+            },
+            null,
+            2,
+          ),
         },
       ],
     };
