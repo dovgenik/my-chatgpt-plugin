@@ -1,5 +1,7 @@
 import {
   createMcpExpressApp,
+  getOAuthProtectedResourceMetadataUrl,
+  mcpAuthMetadataRouter,
   requireBearerAuth,
   type OAuthTokenVerifier,
 } from "@modelcontextprotocol/express";
@@ -13,45 +15,83 @@ import {
   OAuthErrorCode,
 } from "@modelcontextprotocol/server";
 
+
+
+import {
+  createRemoteJWKSet,
+  jwtVerify,
+  type JWTPayload,
+} from "jose";
+
 import { createMcpServer } from "./mcpServer.js";
 import { prisma } from "./lib/prisma.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 
+const CLERK_ISSUER = process.env.CLERK_ISSUER;
+
+const MCP_SERVER_URL = new URL(
+  process.env.MCP_SERVER_URL ?? "http://localhost:3000/mcp",
+);
+
+if (!CLERK_ISSUER) {
+  throw new Error("CLERK_ISSUER is not set");
+}
+
+const jwks = createRemoteJWKSet(
+  new URL(`${CLERK_ISSUER}/.well-known/jwks.json`),
+);
+
+function getScopes(payload: JWTPayload): string[] {
+  const scope = payload.scope;
+
+  if (typeof scope === "string") {
+    return scope
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
 const verifier: OAuthTokenVerifier = {
   async verifyAccessToken(token: string): Promise<AuthInfo> {
-    if (token === "read-token") {
+    try {
+      const { payload } = await jwtVerify(token, jwks, {
+        issuer: CLERK_ISSUER,
+      });
+
+      if (!payload.sub) {
+        throw new Error("Token has no sub claim");
+      }
+
+      if (!payload.exp) {
+        throw new Error("Token has no exp claim");
+      }
+
+      const scopes = getScopes(payload);
+
       return {
         token,
-        clientId: "vadim-readonly",
-        scopes: ["mcp", "notes:read"],
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        clientId: payload.sub,
+        scopes,
+        expiresAt: payload.exp,
       };
+    } catch {
+      throw new OAuthError(
+        OAuthErrorCode.InvalidToken,
+        "Invalid access token",
+      );
     }
-
-    if (token === "full-token") {
-      return {
-        token,
-        clientId: "vadim",
-        scopes: [
-          "mcp",
-          "notes:read",
-          "notes:write",
-        ],
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      };
-    }
-
-    throw new OAuthError(
-      OAuthErrorCode.InvalidToken,
-      "Invalid access token",
-    );
   },
 };
 
 const auth = requireBearerAuth({
   verifier,
-  requiredScopes: ["mcp"],
+  resourceMetadataUrl:
+    getOAuthProtectedResourceMetadataUrl(
+      MCP_SERVER_URL,
+    ),
 });
 
 const mcpHandler = createMcpHandler(() => {
@@ -60,7 +100,31 @@ const mcpHandler = createMcpHandler(() => {
 
 const nodeHandler = toNodeHandler(mcpHandler);
 
+//**************************************************************
+const metadataResponse = await fetch(
+  `${CLERK_ISSUER}/.well-known/oauth-authorization-server`,
+);
+
+if (!metadataResponse.ok) {
+  throw new Error(
+    `Failed to load Clerk OAuth metadata: ${metadataResponse.status}`,
+  );
+}
+
+const oauthMetadata =
+  await metadataResponse.json();
+
+  //***************************************************************
+
 const app = createMcpExpressApp();
+//***************************************
+app.use(
+  mcpAuthMetadataRouter({
+    oauthMetadata,
+    resourceServerUrl: MCP_SERVER_URL,
+  }),
+);
+
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
